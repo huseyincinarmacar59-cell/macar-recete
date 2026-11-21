@@ -19,7 +19,7 @@
     </div>
   </div>
   <nav class="sekmeler" role="tablist">
-    <button class="sekme aktif" data-sekme="recete">📝 Reçete Yaz</button>
+    <button class="sekme aktif" data-sekme="recete">📝 Kullanım Yaz</button>
     <button class="sekme" data-sekme="ilaclar">🧪 İlaçlar</button>
     <button class="sekme" data-sekme="gecmis">📂 Geçmiş</button>
     <button class="sekme" data-sekme="ayarlar">⚙️ Ayarlar</button>
@@ -58,7 +58,7 @@
     <div class="kart">
       <div class="kart-bas">
         <h2>Kullanacağı ilaçlar <span id="seciliSayi" class="rozet">0 seçili</span></h2>
-        <input id="rAra" class="ara" type="search" placeholder="🔍 İlaç ara (ad, etken madde, ürün)">
+        <input id="rAra" class="ara" type="search" placeholder="🔍 İlaç ara">
       </div>
       <div id="secimListe" class="secim-liste"></div>
       <p id="secimBos" class="bos gizli">Henüz ilaç eklenmemiş. Önce <b>🧪 İlaçlar</b> sekmesinden ilaç ekleyin.</p>
@@ -118,8 +118,8 @@
           <button id="aLogoSil" class="btn ince">Varsayılan logo</button>
         </div>
       </div>
-      <label class="alan">Reçetenin altındaki genel uyarılar
-        <textarea id="aUyari" rows="5"></textarea>
+      <label class="alan">Dikkat / uyarılar (her reçetede sabit çıkar, her satır bir madde)
+        <textarea id="aUyari" rows="8"></textarea>
       </label>
       <button id="ayarKaydet" class="btn ana">Kaydet</button>
     </div>
@@ -145,41 +145,11 @@
 <dialog id="ilacPencere" class="pencere no-print">
   <form id="ilacForm" method="dialog">
     <h2 id="ilacBaslik">Yeni ilaç</h2>
-    <div class="satir">
-      <label class="alan genis">İlacın adı *<input id="fAd" required placeholder="Örn. Opera Max"></label>
-      <label class="alan">Türü
-        <select id="fTur">
-          <option>Fungisit (mantar)</option>
-          <option>İnsektisit (böcek)</option>
-          <option>Herbisit (ot)</option>
-          <option>Akarisit (örümcek)</option>
-          <option>Gübre</option>
-          <option>Yaprak gübresi</option>
-          <option>Tohum ilacı</option>
-          <option>Diğer</option>
-        </select>
-      </label>
-    </div>
-    <div class="satir">
-      <label class="alan genis">Etken madde <input id="fEtken" placeholder="Örn. Piraklostrobin + Epoksikonazol"></label>
-      <label class="alan">Firma <input id="fFirma"></label>
-    </div>
-    <div class="satir">
-      <label class="alan genis">Hangi üründe / neye karşı <input id="fNeye" placeholder="Örn. Buğday – pas, septorya"></label>
-    </div>
-    <div class="satir">
-      <label class="alan">Doz <input id="fDoz" placeholder="Örn. 100 ml / dekar"></label>
-      <label class="alan">Su miktarı <input id="fSu" placeholder="Örn. 20–30 L / dekar"></label>
-      <label class="alan">Ne zaman <input id="fZaman" placeholder="Örn. Bayrak yaprak döneminde"></label>
-    </div>
-    <label class="alan">Nasıl kullanılır (müşteriye adım adım anlatın)
-      <textarea id="fNasil" rows="5" placeholder="Her satır reçetede ayrı bir madde olur.&#10;Örn:&#10;Depoyu yarıya kadar suyla doldurun.&#10;İlacı ekleyip karıştırın, sonra depoyu tamamlayın.&#10;Sabah erken ya da akşamüstü uygulayın."></textarea>
+    <label class="alan">İlacın adı *<input id="fAd" required placeholder="Örn. Opera Max"></label>
+    <label class="alan">Nasıl kullanılır (her satır reçetede ayrı madde olur)
+      <textarea id="fNasil" rows="9" placeholder="Örn:&#10;Dekara 100 ml kullanın.&#10;Depoyu yarıya kadar suyla doldurun, ilacı ekleyip karıştırın.&#10;Sabah erken ya da akşamüstü uygulayın."></textarea>
     </label>
-    <div class="satir">
-      <label class="alan">Hasada kalan süre <input id="fBekleme" placeholder="Örn. 35 gün"></label>
-      <label class="alan genis">Dikkat / uyarı <input id="fDikkat" placeholder="Örn. Arılar uçarken uygulamayın."></label>
-    </div>
-    <p class="aciklama">Dozu ve kullanımı ilacın etiketine göre yazın. <a id="fBku" href="https://bku.tarimorman.gov.tr/Arama/Index" target="_blank" rel="noopener">BKÜ'de kontrol et ↗</a></p>
+    <p class="aciklama">Uyarılar her reçetenin altında sabit çıkar; onları <b>Ayarlar</b>'dan değiştirebilirsiniz. <a href="https://bku.tarimorman.gov.tr/Arama/Index" target="_blank" rel="noopener">BKÜ'de kontrol et ↗</a></p>
     <div class="pencere-alt">
       <button type="button" id="ilacSil" class="btn tehlike gizli">Sil</button>
       <span class="bosluk"></span>

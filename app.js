@@ -1,7 +1,7 @@
 /* Macar Reçete — ilaç kullanım reçetesi programı */
 "use strict";
 
-const SURUM = "1.0.0";
+const SURUM = "1.1.0";
 const ANAHTAR = "macar-recete-v1";
 
 const VARSAYILAN_UYARI = [
@@ -80,9 +80,11 @@ function bildir(mesaj) {
 
 function eslesir(ilac, q) {
   if (!q) return true;
-  const metin = kucuk([ilac.ad, ilac.etken, ilac.neye, ilac.tur, ilac.firma].join(" "));
+  const metin = kucuk([ilac.ad, ilac.nasil].join(" "));
   return kucuk(q).split(/\s+/).filter(Boolean).every((p) => metin.includes(p));
 }
+
+const ilkSatir = (s) => String(s || "").split("\n").map((x) => x.trim()).find(Boolean) || "Kullanım bilgisi yok";
 
 /* ---------------- sekmeler ---------------- */
 function sekmeAc(ad) {
@@ -108,7 +110,7 @@ function secimCiz() {
     return `<label class="secim${s >= 0 ? " secili" : ""}" data-id="${i.id}">
       <input type="checkbox" ${s >= 0 ? "checked" : ""}>
       <div><div class="secim-ad">${esc(i.ad)}<span class="sira">${s + 1}</span></div>
-      <div class="secim-alt">${esc([i.tur, i.neye].filter(Boolean).join(" · "))}</div></div>
+      <div class="secim-alt">${esc(ilkSatir(i.nasil))}</div></div>
     </label>`;
   }).join("");
   if (veri.ilaclar.length && !liste.length) $("#secimListe").innerHTML = `<p class="bos">“${esc(q)}” ile eşleşen ilaç yok.</p>`;
@@ -200,7 +202,7 @@ function receteHTML(r) {
     ${r.not ? `<div class="r-not">${esc(r.not)}</div>` : ""}
     ${ilaclar}
     <div class="r-alt">
-      ${uyarilar.length ? `<div class="r-uyari"><b>Genel uyarılar</b><ul>${uyarilar.map((u) => `<li>${esc(u)}</li>`).join("")}</ul></div>` : ""}
+      ${uyarilar.length ? `<div class="r-uyari"><b>⚠ Dikkat – Uyarılar</b><ul>${uyarilar.map((u) => `<li>${esc(u)}</li>`).join("")}</ul></div>` : ""}
       <div class="r-imza"><div class="r-imza-kutu">${esc(a.yetkili || "")}<br>&nbsp;</div></div>
     </div>
   </div>`;
@@ -235,10 +237,9 @@ function ilacCiz() {
     <div class="ilac-satir" data-id="${i.id}">
       <div class="ilac-bilgi">
         <div class="ilac-ad">${esc(i.ad)}</div>
-        <div class="ilac-alt">${esc([i.doz, i.neye, i.etken].filter(Boolean).join(" · ")) || "&nbsp;"}</div>
+        <div class="ilac-alt">${i.nasil ? esc(ilkSatir(i.nasil)) : "&nbsp;"}</div>
       </div>
-      ${!i.nasil && !i.doz ? '<span class="eksik">Kullanım bilgisi yok</span>' : ""}
-      <span class="tur">${esc(i.tur || "")}</span>
+      ${!i.nasil ? '<span class="eksik">Kullanım bilgisi yok</span>' : ""}
     </div>`).join("");
   if (veri.ilaclar.length && !liste.length) $("#ilacListe").innerHTML = `<p class="bos">“${esc(q)}” ile eşleşen ilaç yok.</p>`;
 }
@@ -249,23 +250,15 @@ $("#ilacListe").addEventListener("click", (e) => {
 });
 $("#yeniIlacBtn").addEventListener("click", () => ilacPencereAc(null));
 
-const ALANLAR = { ad: "#fAd", tur: "#fTur", etken: "#fEtken", firma: "#fFirma", neye: "#fNeye", doz: "#fDoz", su: "#fSu", zaman: "#fZaman", nasil: "#fNasil", bekleme: "#fBekleme", dikkat: "#fDikkat" };
+const ALANLAR = { ad: "#fAd", nasil: "#fNasil" };
 let duzenlenen = null;
-
-function bkuLink() {
-  $("#fBku").href = "https://bku.tarimorman.gov.tr/Arama/Index";
-}
 
 function ilacPencereAc(iid) {
   duzenlenen = iid;
   const i = iid ? veri.ilaclar.find((x) => x.id === iid) : null;
   $("#ilacBaslik").textContent = i ? "İlacı düzenle" : "Yeni ilaç";
-  for (const [k, s] of Object.entries(ALANLAR)) {
-    if (k === "tur") $(s).value = i?.tur || $(s).options[0].value;
-    else $(s).value = i?.[k] || "";
-  }
+  for (const [k, s] of Object.entries(ALANLAR)) $(s).value = i?.[k] || "";
   $("#ilacSil").classList.toggle("gizli", !i);
-  bkuLink();
   $("#ilacPencere").showModal();
   $("#fAd").focus();
 }
