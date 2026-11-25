@@ -1,10 +1,10 @@
-# Macar Reçete
+# Macar Talimat
 
-Macar Tarım için ilaç kullanım reçetesi programı.
+Macar Tarım için ilaç kullanım talimatı programı.
 
-1. **İlaçlar** sekmesinden ilaçları bir kere ekleyin: adı, dozu, nasıl kullanılacağı.
-2. **Reçete Yaz** sekmesinde müşterinin adını yazın, kullanacağı ilaçları işaretleyin.
-3. **Reçeteyi oluştur** → **Yazdır / PDF**: A4 reçete yazıcıdan çıkar ya da PDF olarak kaydedilir.
+1. **İlaçlar** sekmesinden ilaçları bir kere ekleyin: adı ve nasıl kullanılacağı.
+2. **Kullanım Yaz** sekmesinde müşterinin adını yazın, kullanacağı ilaçları işaretleyin.
+3. **Talimatı oluştur** → **Yazdır / PDF**: A4 kullanım talimatı yazıcıdan çıkar ya da PDF olarak kaydedilir.
 
 ## Windows 11'e kurulum (Microsoft Edge)
 
@@ -16,8 +16,8 @@ Güncellemeler kendiliğinden gelir; program açıkken "Yeni güncelleme hazır"
 
 ## Veriler
 
-İlaçlar ve reçeteler o bilgisayarda saklanır. **Ayarlar → Yedek al** ile arada bir yedek alın.
+İlaçlar ve talimatlar o bilgisayarda saklanır. **Ayarlar → Yedek al** ile arada bir yedek alın.
 
 ## Geliştirici notu
 
-Yeni sürüm yayınlarken `sw.js` içindeki `SURUM` ve `app.js` içindeki `SURUM` değerlerini artırın; yoksa kurulu programlar güncellemeyi almaz.
+Yeni sürüm yayınlarken `sw.js` ve `app.js` içindeki `SURUM` değerlerini artırın; yoksa kurulu programlar güncellemeyi almaz.

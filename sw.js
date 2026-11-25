@@ -1,7 +1,7 @@
-/* Macar Reçete service worker — çevrimdışı çalışma + otomatik güncelleme */
-const SURUM = "macar-recete-1.1.0";
+/* Macar Talimat service worker — çevrimdışı çalışma + otomatik güncelleme */
+const SURUM = "macar-talimat-1.6.0";
 const DOSYALAR = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest",
-  "icons/logo.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png"];
+  "icons/logo.png", "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SURUM).then((c) => c.addAll(DOSYALAR.map((d) => new Request(d, { cache: "reload" })))));

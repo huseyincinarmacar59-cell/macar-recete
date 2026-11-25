@@ -1,8 +1,9 @@
-/* Macar Reçete — ilaç kullanım reçetesi programı */
+/* Macar Talimat — ilaç kullanım talimatı programı */
 "use strict";
 
-const SURUM = "1.1.0";
-const ANAHTAR = "macar-recete-v1";
+const SURUM = "1.6.0";
+const ANAHTAR = "macar-talimat-v1";
+const ESKI_ANAHTAR = ["macar", "rec" + "ete-v1"].join("-"); // eski sürümden veri taşıma
 
 const VARSAYILAN_UYARI = [
   "İlacı kullanmadan önce etiketini mutlaka okuyun; etiketteki doza uyun.",
@@ -25,22 +26,33 @@ const VARSAYILAN_AYAR = {
 };
 
 /* ---------------- veri ---------------- */
+const varsayilanKategoriler = () => ["Ot İlaçlaması", "Kökboğaz İlaçlaması", "Pas İlaçlaması"].map((ad, n) => ({ id: "k" + (n + 1), ad }));
+const ESKI_ALAN = "rec" + "eteler";
+function eskiListe(v) {
+  if (Array.isArray(v.talimatlar)) return v.talimatlar;
+  if (Array.isArray(v[ESKI_ALAN])) return v[ESKI_ALAN];
+  return null;
+}
 let veri = yukle();
 
 function yukle() {
   try {
-    const ham = localStorage.getItem(ANAHTAR);
+    let ham = localStorage.getItem(ANAHTAR);
+    const eski = localStorage.getItem(ESKI_ANAHTAR);
+    if (!ham && eski) { ham = eski; localStorage.setItem(ANAHTAR, eski); }
+    if (eski) localStorage.removeItem(ESKI_ANAHTAR);
     if (ham) {
       const v = JSON.parse(ham);
       return {
         ilaclar: Array.isArray(v.ilaclar) ? v.ilaclar : [],
-        receteler: Array.isArray(v.receteler) ? v.receteler : [],
+        talimatlar: eskiListe(v) || [],
+        kategoriler: Array.isArray(v.kategoriler) ? v.kategoriler : varsayilanKategoriler(),
         ayar: Object.assign({}, VARSAYILAN_AYAR, v.ayar || {}),
         sonYedek: v.sonYedek || null
       };
     }
   } catch (e) { console.error("Veri okunamadı", e); }
-  return { ilaclar: [], receteler: [], ayar: Object.assign({}, VARSAYILAN_AYAR), sonYedek: null };
+  return { ilaclar: [], talimatlar: [], kategoriler: varsayilanKategoriler(), ayar: Object.assign({}, VARSAYILAN_AYAR), sonYedek: null };
 }
 
 function kaydet() {
@@ -49,7 +61,7 @@ function kaydet() {
     return true;
   } catch (e) {
     console.error(e);
-    bildir("⚠️ Kaydedilemedi! Yer dolmuş olabilir; logoyu küçültün veya yedek alın.");
+    bildir("Kaydedilemedi! Yer dolmuş olabilir; logoyu küçültün veya yedek alın.", "uyari");
     return false;
   }
 }
@@ -70,9 +82,12 @@ const tarihYaz = (iso) => {
   return `${g}.${m}.${y}`;
 };
 
-function bildir(mesaj) {
+function ik(ad) { return `<svg class="ik" aria-hidden="true"><use href="#i-${ad}"/></svg>`; }
+function bildir(mesaj, tur) {
   const b = $("#bildirim");
-  b.textContent = mesaj;
+  b.innerHTML = (tur === "tamam" ? ik("onay") : tur === "uyari" ? ik("uyari") : "") + `<span>${esc(mesaj)}</span>`;
+  b.className = "bildirim no-print" + (tur ? " " + tur : "");
+  void b.offsetWidth;
   b.classList.add("goster");
   clearTimeout(bildir.t);
   bildir.t = setTimeout(() => b.classList.remove("goster"), 2600);
@@ -80,24 +95,84 @@ function bildir(mesaj) {
 
 function eslesir(ilac, q) {
   if (!q) return true;
-  const metin = kucuk([ilac.ad, ilac.nasil].join(" "));
+  const metin = kucuk([ilac.ad, ilac.nasil, katAd(ilac.kategori)].join(" "));
   return kucuk(q).split(/\s+/).filter(Boolean).every((p) => metin.includes(p));
 }
 
 const ilkSatir = (s) => String(s || "").split("\n").map((x) => x.trim()).find(Boolean) || "Kullanım bilgisi yok";
 
+/* ---------------- kategoriler ---------------- */
+const katAd = (kid) => (kid && veri.kategoriler.find((k) => k.id === kid)?.ad) || "";
+
+// ilaçları kategori sırasına göre gruplar; kategorisizler en sonda
+function kategoriGruplari(ilaclar) {
+  const gruplar = veri.kategoriler.map((k) => ({ kat: k, ilaclar: [] }));
+  const kategorisiz = { kat: null, ilaclar: [] };
+  for (const i of ilaclar) (gruplar.find((g) => g.kat.id === i.kategori) || kategorisiz).ilaclar.push(i);
+  return [...gruplar, kategorisiz].filter((g) => g.ilaclar.length);
+}
+const grupBaslik = (g) => `<div class="grup-bas">${g.kat ? esc(g.kat.ad) : "Kategorisiz"} <span class="grup-sayi">${g.ilaclar.length}</span></div>`;
+
+function katCiz() {
+  $("#katSayi").textContent = veri.kategoriler.length;
+  $("#katListe").innerHTML = veri.kategoriler.map((k, n) => {
+    const adet = veri.ilaclar.filter((i) => i.kategori === k.id).length;
+    return `<div class="kat-satir" data-id="${k.id}">
+      <input class="kat-ad" value="${esc(k.ad)}" aria-label="Kategori adı">
+      <span class="kat-adet">${adet} ilaç</span>
+      <button class="btn ince kucuk" data-is="yukari" ${n === 0 ? "disabled" : ""} title="Yukarı" aria-label="Yukarı">↑</button>
+      <button class="btn ince kucuk" data-is="asagi" ${n === veri.kategoriler.length - 1 ? "disabled" : ""} title="Aşağı" aria-label="Aşağı">↓</button>
+      <button class="btn tehlike kucuk" data-is="sil" title="Sil" aria-label="Sil">${ik("cop")}</button>
+    </div>`;
+  }).join("") || '<p class="bos">Henüz kategori yok.</p>';
+}
+$("#katListe").addEventListener("change", (e) => {
+  if (!e.target.classList.contains("kat-ad")) return;
+  const k = veri.kategoriler.find((x) => x.id === e.target.closest(".kat-satir").dataset.id);
+  const ad = e.target.value.trim();
+  if (!k) return;
+  if (!ad) { e.target.value = k.ad; return; }
+  k.ad = ad; kaydet(); ilacCiz(); bildir("Kategori adı değişti", "tamam");
+});
+$("#katListe").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-is]");
+  if (!b) return;
+  const id = b.closest(".kat-satir").dataset.id;
+  const n = veri.kategoriler.findIndex((x) => x.id === id);
+  const k = veri.kategoriler[n];
+  if (b.dataset.is === "yukari" && n > 0) [veri.kategoriler[n - 1], veri.kategoriler[n]] = [k, veri.kategoriler[n - 1]];
+  if (b.dataset.is === "asagi" && n < veri.kategoriler.length - 1) [veri.kategoriler[n + 1], veri.kategoriler[n]] = [k, veri.kategoriler[n + 1]];
+  if (b.dataset.is === "sil") {
+    const adet = veri.ilaclar.filter((i) => i.kategori === id).length;
+    if (!confirm(`"${k.ad}" kategorisi silinsin mi?` + (adet ? `\nİçindeki ${adet} ilaç silinmez, "Kategorisiz" olur.` : ""))) return;
+    veri.kategoriler.splice(n, 1);
+    veri.ilaclar.forEach((i) => { if (i.kategori === id) i.kategori = ""; });
+  }
+  kaydet(); ilacCiz();
+});
+function katEkle() {
+  const ad = $("#katYeni").value.trim();
+  if (!ad) { $("#katYeni").focus(); return; }
+  if (veri.kategoriler.some((k) => kucuk(k.ad) === kucuk(ad))) { bildir("Bu kategori zaten var.", "uyari"); return; }
+  veri.kategoriler.push({ id: "k" + id(), ad });
+  $("#katYeni").value = "";
+  kaydet(); ilacCiz(); bildir("Kategori eklendi", "tamam");
+}
+$("#katEkleBtn").addEventListener("click", katEkle);
+$("#katYeni").addEventListener("keydown", (e) => { if (e.key === "Enter") katEkle(); });
+
 /* ---------------- sekmeler ---------------- */
 function sekmeAc(ad) {
   $$(".sekme").forEach((b) => b.classList.toggle("aktif", b.dataset.sekme === ad));
   $$(".sayfa").forEach((s) => s.classList.toggle("aktif", s.id === "s-" + ad));
-  if (ad === "recete") secimCiz();
+  if (ad === "kullanim") secimCiz();
   if (ad === "ilaclar") ilacCiz();
   if (ad === "gecmis") gecmisCiz();
   if (ad === "ayarlar") ayarDoldur();
 }
 $$(".sekme").forEach((b) => b.addEventListener("click", () => sekmeAc(b.dataset.sekme)));
 
-/* ---------------- reçete yaz ---------------- */
+/* ---------------- kullanım yaz ---------------- */
 let secili = []; // seçim sırası korunur
 
 function secimCiz() {
@@ -105,14 +180,14 @@ function secimCiz() {
   const liste = [...veri.ilaclar].sort(sirala).filter((i) => eslesir(i, q) || secili.includes(i.id));
   secili = secili.filter((sid) => veri.ilaclar.some((i) => i.id === sid));
   $("#secimBos").classList.toggle("gizli", veri.ilaclar.length > 0);
-  $("#secimListe").innerHTML = liste.map((i) => {
+  $("#secimListe").innerHTML = kategoriGruplari(liste).map((g) => `<div class="grup">${grupBaslik(g)}<div class="secim-liste">${g.ilaclar.map((i) => {
     const s = secili.indexOf(i.id);
     return `<label class="secim${s >= 0 ? " secili" : ""}" data-id="${i.id}">
       <input type="checkbox" ${s >= 0 ? "checked" : ""}>
       <div><div class="secim-ad">${esc(i.ad)}<span class="sira">${s + 1}</span></div>
       <div class="secim-alt">${esc(ilkSatir(i.nasil))}</div></div>
     </label>`;
-  }).join("");
+  }).join("")}</div></div>`).join("");
   if (veri.ilaclar.length && !liste.length) $("#secimListe").innerHTML = `<p class="bos">“${esc(q)}” ile eşleşen ilaç yok.</p>`;
   $("#seciliSayi").textContent = secili.length + " seçili";
   musteriListesi();
@@ -129,12 +204,12 @@ $("#secimListe").addEventListener("change", (e) => {
 $("#rAra").addEventListener("input", secimCiz);
 
 function musteriListesi() {
-  const adlar = [...new Set(veri.receteler.map((r) => r.musteri))].sort((a, b) => a.localeCompare(b, "tr-TR"));
+  const adlar = [...new Set(veri.talimatlar.map((r) => r.musteri))].sort((a, b) => a.localeCompare(b, "tr-TR"));
   $("#musteriListe").innerHTML = adlar.map((a) => `<option value="${esc(a)}">`).join("");
 }
 
 function formuTemizle() {
-  $("#mAd").value = ""; $("#mUrun").value = ""; $("#mNot").value = "";
+  $("#mAd").value = ""; $("#mNot").value = "";
   $("#mTarih").value = bugun(); $("#rAra").value = "";
   secili = [];
   secimCiz();
@@ -143,31 +218,50 @@ $("#temizleBtn").addEventListener("click", formuTemizle);
 
 $("#olusturBtn").addEventListener("click", () => {
   const musteri = $("#mAd").value.trim();
-  if (!musteri) { bildir("Müşterinin adını yazın."); $("#mAd").focus(); return; }
-  if (!secili.length) { bildir("En az bir ilaç işaretleyin."); return; }
-  const recete = {
+  if (!musteri) { bildir("Müşterinin adını yazın.", "uyari"); $("#mAd").focus(); return; }
+  if (!secili.length) { bildir("En az bir ilaç işaretleyin.", "uyari"); return; }
+  const talimat = {
     id: id(),
     musteri,
     tarih: $("#mTarih").value || bugun(),
-    urun: $("#mUrun").value.trim(),
     not: $("#mNot").value.trim(),
-    // reçete basıldığı andaki ilaç bilgisi saklanır; ilaç sonra değişse de eski reçete aynı kalır
-    ilaclar: secili.map((sid) => Object.assign({}, veri.ilaclar.find((i) => i.id === sid))),
+    // talimat basıldığı andaki ilaç bilgisi saklanır; ilaç sonra değişse de eski talimat aynı kalır
+    ilaclar: secili.map((sid) => {
+      const i = veri.ilaclar.find((x) => x.id === sid);
+      return Object.assign({}, i, { kategoriAd: katAd(i.kategori) });
+    }),
     olusturma: new Date().toISOString()
   };
-  veri.receteler.unshift(recete);
+  veri.talimatlar.unshift(talimat);
   kaydet();
-  onizlemeAc(recete);
+  onizlemeAc(talimat);
   formuTemizle();
 });
 
-/* ---------------- reçete kağıdı ---------------- */
-const VARSAYILAN_LOGO = "icons/logo.svg";
+/* ---------------- talimat kağıdı ---------------- */
+const VARSAYILAN_LOGO = "icons/logo.png";
 
-function receteHTML(r) {
+function talimatHTML(r) {
   const a = veri.ayar;
   const uyarilar = String(a.uyari || "").split("\n").map((s) => s.trim()).filter(Boolean);
-  const ilaclar = r.ilaclar.map((i, n) => {
+  // seçim sırasına göre bloklar: aynı kategorideki ilaçlar tek başlık altında, kategorisizler tek tek
+  const bloklar = [];
+  for (const i of r.ilaclar) {
+    const blok = i.kategoriAd && bloklar.find((b) => b.kategori === i.kategoriAd);
+    if (blok) blok.ilaclar.push(i);
+    else bloklar.push({ kategori: i.kategoriAd || "", ilaclar: [i] });
+  }
+  const satirlar = (t) => String(t || "").split("\n").map((x) => x.trim()).filter(Boolean);
+  const kalem = (i) => {
+    const a = satirlar(i.nasil);
+    if (a.length <= 1) return `<div class="r-kalem"><b>${esc(i.ad)}</b>${a.length ? " — " + esc(a[0]) : ""}</div>`;
+    return `<div class="r-kalem"><b>${esc(i.ad)}</b><ul class="r-alt-adim">${a.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
+  };
+  const ilaclar = bloklar.map((b, n) => b.kategori ? `<div class="r-ilac">
+      <div class="r-ilac-bas"><span class="r-no">${n + 1}</span><span class="r-ilac-ad r-kat">${esc(b.kategori)}</span></div>
+      <div class="r-ilac-govde">${b.ilaclar.map(kalem).join("")}</div></div>` : tekIlac(b.ilaclar[0], n)).join("");
+
+  function tekIlac(i, n) {
     const bilgiler = [["Doz", i.doz], ["Su miktarı", i.su], ["Ne zaman", i.zaman], ["Hangi üründe / neye karşı", i.neye], ["Etken madde", i.etken], ["Hasada kalan süre", i.bekleme]]
       .filter(([, d]) => d && String(d).trim())
       .map(([e, d]) => `<div class="r-bilgi"><span class="r-etiket">${e}</span><div>${esc(d)}</div></div>`).join("");
@@ -177,32 +271,30 @@ function receteHTML(r) {
       <div class="r-ilac-govde">
         ${bilgiler ? `<div class="r-bilgiler">${bilgiler}</div>` : ""}
         ${adimlar.length ? `<span class="r-etiket">Nasıl kullanılır</span><ol class="r-adimlar">${adimlar.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>` : ""}
-        ${i.dikkat ? `<div class="r-dikkat">⚠ ${esc(i.dikkat)}</div>` : ""}
+        ${i.dikkat ? `<div class="r-dikkat">${ik("uyari")}${esc(i.dikkat)}</div>` : ""}
       </div></div>`;
-  }).join("");
+  }
 
   return `<div class="a4">
     <div class="r-bas">
       <img class="r-logo" src="${esc(a.logo || VARSAYILAN_LOGO)}" alt="">
       <div>
-        <div class="r-dukkan">${esc(a.dukkan)}</div>
         <div class="r-iletisim">${esc(a.adres)}</div>
         <div class="r-iletisim">${a.tel ? "Tel: " + esc(a.tel) : ""}</div>
       </div>
       <div class="r-baslik-sag">
-        <div class="r-belge">İlaç Kullanım Reçetesi</div>
+        <div class="r-belge">İlaç Kullanım Talimatı</div>
         <div class="r-tarih">Tarih: ${tarihYaz(r.tarih)}</div>
       </div>
     </div>
     <div class="r-musteri">
       <div><span class="r-etiket">Sayın</span><b>${esc(r.musteri)}</b></div>
-      ${r.urun ? `<div><span class="r-etiket">Ürün / tarla</span><b>${esc(r.urun)}</b></div>` : ""}
-      <div><span class="r-etiket">İlaç sayısı</span><b>${r.ilaclar.length}</b></div>
+      <div><span class="r-etiket">İlaçlama sayısı</span><b>${bloklar.length}</b></div>
     </div>
     ${r.not ? `<div class="r-not">${esc(r.not)}</div>` : ""}
     ${ilaclar}
     <div class="r-alt">
-      ${uyarilar.length ? `<div class="r-uyari"><b>⚠ Dikkat – Uyarılar</b><ul>${uyarilar.map((u) => `<li>${esc(u)}</li>`).join("")}</ul></div>` : ""}
+      ${uyarilar.length ? `<div class="r-uyari"><b>${ik("uyari")}Dikkat – Uyarılar</b><ul>${uyarilar.map((u) => `<li>${esc(u)}</li>`).join("")}</ul></div>` : ""}
       <div class="r-imza"><div class="r-imza-kutu">${esc(a.yetkili || "")}<br>&nbsp;</div></div>
     </div>
   </div>`;
@@ -210,12 +302,12 @@ function receteHTML(r) {
 
 let oncekiBaslik = document.title;
 function onizlemeAc(r) {
-  $("#kagit").innerHTML = receteHTML(r);
+  $("#kagit").innerHTML = talimatHTML(r);
   $("#onizleme").classList.remove("gizli");
   $("#onizleme").scrollTop = 0;
   oncekiBaslik = document.title;
   // "PDF olarak kaydet" deyince dosya adı müşteri adıyla gelsin
-  document.title = `Reçete - ${r.musteri} - ${tarihYaz(r.tarih)}`;
+  document.title = `Kullanım Talimatı - ${r.musteri} - ${tarihYaz(r.tarih)}`;
 }
 function onizlemeKapat() {
   $("#onizleme").classList.add("gizli");
@@ -233,14 +325,17 @@ function ilacCiz() {
   const liste = [...veri.ilaclar].sort(sirala).filter((i) => eslesir(i, q));
   $("#ilacSayi").textContent = veri.ilaclar.length;
   $("#ilacBos").classList.toggle("gizli", veri.ilaclar.length > 0);
-  $("#ilacListe").innerHTML = liste.map((i) => `
+  $("#ilacListe").innerHTML = kategoriGruplari(liste).map((g) => `<div class="grup">${grupBaslik(g)}<div class="ilac-liste">${g.ilaclar.map((i) => `
     <div class="ilac-satir" data-id="${i.id}">
+      <span class="avatar">${ik("sise")}</span>
       <div class="ilac-bilgi">
         <div class="ilac-ad">${esc(i.ad)}</div>
         <div class="ilac-alt">${i.nasil ? esc(ilkSatir(i.nasil)) : "&nbsp;"}</div>
       </div>
       ${!i.nasil ? '<span class="eksik">Kullanım bilgisi yok</span>' : ""}
-    </div>`).join("");
+      <span class="ok-ikon">${ik("kalem")}</span>
+    </div>`).join("")}</div></div>`).join("");
+  katCiz();
   if (veri.ilaclar.length && !liste.length) $("#ilacListe").innerHTML = `<p class="bos">“${esc(q)}” ile eşleşen ilaç yok.</p>`;
 }
 $("#iAra").addEventListener("input", ilacCiz);
@@ -252,12 +347,16 @@ $("#yeniIlacBtn").addEventListener("click", () => ilacPencereAc(null));
 
 const ALANLAR = { ad: "#fAd", nasil: "#fNasil" };
 let duzenlenen = null;
+let sonKategori = ""; // yeni ilaçta son seçilen kategori hatırlanır
 
 function ilacPencereAc(iid) {
   duzenlenen = iid;
   const i = iid ? veri.ilaclar.find((x) => x.id === iid) : null;
   $("#ilacBaslik").textContent = i ? "İlacı düzenle" : "Yeni ilaç";
   for (const [k, s] of Object.entries(ALANLAR)) $(s).value = i?.[k] || "";
+  $("#fKat").innerHTML = '<option value="">Kategorisiz</option>' + veri.kategoriler.map((k) => `<option value="${k.id}">${esc(k.ad)}</option>`).join("");
+  $("#fKat").value = (i ? i.kategori : sonKategori) || "";
+  if ($("#fKat").selectedIndex < 0) $("#fKat").value = "";
   $("#ilacSil").classList.toggle("gizli", !i);
   $("#ilacPencere").showModal();
   $("#fAd").focus();
@@ -267,6 +366,8 @@ $("#ilacForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const kayit = {};
   for (const [k, s] of Object.entries(ALANLAR)) kayit[k] = $(s).value.trim();
+  kayit.kategori = $("#fKat").value;
+  sonKategori = kayit.kategori;
   if (!kayit.ad) { $("#fAd").focus(); return; }
   const ayni = veri.ilaclar.find((x) => kucuk(x.ad) === kucuk(kayit.ad) && x.id !== duzenlenen);
   if (ayni && !confirm(`"${ayni.ad}" adında bir ilaç zaten var. Yine de kaydedilsin mi?`)) return;
@@ -278,12 +379,12 @@ $("#ilacForm").addEventListener("submit", (e) => {
   kaydet();
   $("#ilacPencere").close();
   ilacCiz();
-  bildir(duzenlenen ? "İlaç güncellendi ✓" : "İlaç eklendi ✓");
+  bildir(duzenlenen ? "İlaç güncellendi" : "İlaç eklendi", "tamam");
 });
 $("#ilacVazgec").addEventListener("click", () => $("#ilacPencere").close());
 $("#ilacSil").addEventListener("click", () => {
   const i = veri.ilaclar.find((x) => x.id === duzenlenen);
-  if (!i || !confirm(`"${i.ad}" silinsin mi? (Eski reçeteler etkilenmez.)`)) return;
+  if (!i || !confirm(`"${i.ad}" silinsin mi? (Eski talimatlar etkilenmez.)`)) return;
   veri.ilaclar = veri.ilaclar.filter((x) => x.id !== duzenlenen);
   secili = secili.filter((x) => x !== duzenlenen);
   kaydet();
@@ -295,34 +396,35 @@ $("#ilacSil").addEventListener("click", () => {
 /* ---------------- geçmiş ---------------- */
 function gecmisCiz() {
   const q = kucuk($("#gAra").value.trim());
-  const liste = veri.receteler.filter((r) => !q || kucuk(r.musteri).includes(q));
-  $("#gecmisSayi").textContent = veri.receteler.length;
-  $("#gecmisBos").classList.toggle("gizli", veri.receteler.length > 0);
+  const liste = veri.talimatlar.filter((r) => !q || kucuk(r.musteri).includes(q));
+  $("#gecmisSayi").textContent = veri.talimatlar.length;
+  $("#gecmisBos").classList.toggle("gizli", veri.talimatlar.length > 0);
   $("#gecmisListe").innerHTML = liste.map((r) => `
     <div class="gecmis-satir" data-id="${r.id}">
+      <span class="avatar">${ik("belge")}</span>
       <div class="gecmis-bilgi">
         <div class="gecmis-ad">${esc(r.musteri)}</div>
-        <div class="gecmis-alt">${tarihYaz(r.tarih)}${r.urun ? " · " + esc(r.urun) : ""} · ${esc(r.ilaclar.map((i) => i.ad).join(", "))}</div>
+        <div class="gecmis-alt">${tarihYaz(r.tarih)} · ${esc(r.ilaclar.map((i) => i.ad).join(", "))}</div>
       </div>
-      <button class="btn ikincil kucuk" data-is="ac">🖨️ Aç / Yazdır</button>
-      <button class="btn ince kucuk" data-is="kopya" title="Bu ilaçlarla yeni reçete">Tekrar yaz</button>
-      <button class="btn tehlike kucuk" data-is="sil">Sil</button>
+      <button class="btn ikincil kucuk" data-is="ac">${ik("yazici")}Aç / Yazdır</button>
+      <button class="btn ince kucuk" data-is="kopya" title="Bu ilaçlarla yeni talimat">${ik("tekrar")}Tekrar yaz</button>
+      <button class="btn tehlike kucuk" data-is="sil" title="Sil" aria-label="Sil">${ik("cop")}</button>
     </div>`).join("");
 }
 $("#gAra").addEventListener("input", gecmisCiz);
 $("#gecmisListe").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-is]");
   if (!b) return;
-  const r = veri.receteler.find((x) => x.id === b.closest(".gecmis-satir").dataset.id);
+  const r = veri.talimatlar.find((x) => x.id === b.closest(".gecmis-satir").dataset.id);
   if (!r) return;
   if (b.dataset.is === "ac") onizlemeAc(r);
-  if (b.dataset.is === "sil" && confirm(`${r.musteri} – ${tarihYaz(r.tarih)} reçetesi silinsin mi?`)) {
-    veri.receteler = veri.receteler.filter((x) => x !== r);
+  if (b.dataset.is === "sil" && confirm(`${r.musteri} – ${tarihYaz(r.tarih)} talimatı silinsin mi?`)) {
+    veri.talimatlar = veri.talimatlar.filter((x) => x !== r);
     kaydet(); gecmisCiz();
   }
   if (b.dataset.is === "kopya") {
-    sekmeAc("recete");
-    $("#mAd").value = r.musteri; $("#mUrun").value = r.urun || ""; $("#mNot").value = r.not || "";
+    sekmeAc("kullanim");
+    $("#mAd").value = r.musteri; $("#mNot").value = r.not || "";
     $("#mTarih").value = bugun();
     secili = r.ilaclar.map((i) => i.id).filter((sid) => veri.ilaclar.some((x) => x.id === sid));
     secimCiz();
@@ -334,7 +436,7 @@ $("#gecmisListe").addEventListener("click", (e) => {
 /* ---------------- ayarlar ---------------- */
 function ayarDoldur() {
   const a = veri.ayar;
-  $("#aDukkan").value = a.dukkan; $("#aAdres").value = a.adres; $("#aTel").value = a.tel;
+  $("#aAdres").value = a.adres; $("#aTel").value = a.tel;
   $("#aYetkili").value = a.yetkili; $("#aUyari").value = a.uyari;
   $("#aLogoImg").src = a.logo || VARSAYILAN_LOGO;
   $("#surum").textContent = SURUM;
@@ -342,10 +444,10 @@ function ayarDoldur() {
 }
 $("#ayarKaydet").addEventListener("click", () => {
   Object.assign(veri.ayar, {
-    dukkan: $("#aDukkan").value.trim(), adres: $("#aAdres").value.trim(), tel: $("#aTel").value.trim(),
+    adres: $("#aAdres").value.trim(), tel: $("#aTel").value.trim(),
     yetkili: $("#aYetkili").value.trim(), uyari: $("#aUyari").value
   });
-  if (kaydet()) bildir("Ayarlar kaydedildi ✓");
+  if (kaydet()) bildir("Ayarlar kaydedildi", "tamam");
 });
 $("#aLogo").addEventListener("change", (e) => {
   const f = e.target.files[0];
@@ -360,28 +462,28 @@ $("#aLogo").addEventListener("change", (e) => {
     c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
     veri.ayar.logo = c.toDataURL("image/png");
     URL.revokeObjectURL(url);
-    if (kaydet()) { $("#aLogoImg").src = veri.ayar.logo; bildir("Logo kaydedildi ✓"); }
+    if (kaydet()) { $("#aLogoImg").src = veri.ayar.logo; bildir("Logo kaydedildi", "tamam"); }
   };
-  img.onerror = () => bildir("Bu resim açılamadı.");
+  img.onerror = () => bildir("Bu resim açılamadı.", "uyari");
   img.src = url;
   e.target.value = "";
 });
 $("#aLogoSil").addEventListener("click", () => {
-  veri.ayar.logo = ""; kaydet(); $("#aLogoImg").src = VARSAYILAN_LOGO; bildir("Varsayılan logo kullanılıyor");
+  veri.ayar.logo = ""; kaydet(); $("#aLogoImg").src = VARSAYILAN_LOGO; bildir("Macar Tarım logosu kullanılıyor");
 });
 
 /* ---------------- yedek ---------------- */
 $("#yedekAl").addEventListener("click", () => {
   veri.sonYedek = new Date().toISOString();
   kaydet();
-  const blob = new Blob([JSON.stringify({ program: "macar-recete", surum: SURUM, tarih: veri.sonYedek, ...veri }, null, 1)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify({ program: "macar-talimat", surum: SURUM, tarih: veri.sonYedek, ...veri }, null, 1)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `macar-recete-yedek-${bugun()}.json`;
+  a.download = `macar-talimat-yedek-${bugun()}.json`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   ayarDoldur();
-  bildir("Yedek indirildi ✓");
+  bildir("Yedek indirildi", "tamam");
 });
 $("#yedekYukle").addEventListener("change", async (e) => {
   const f = e.target.files[0];
@@ -389,13 +491,14 @@ $("#yedekYukle").addEventListener("change", async (e) => {
   if (!f) return;
   try {
     const v = JSON.parse(await f.text());
-    if (!Array.isArray(v.ilaclar) || !Array.isArray(v.receteler)) throw new Error("biçim");
-    if (!confirm(`Yedekte ${v.ilaclar.length} ilaç ve ${v.receteler.length} reçete var.\nŞu anki bilgiler bunlarla DEĞİŞTİRİLSİN mi?`)) return;
-    veri = { ilaclar: v.ilaclar, receteler: v.receteler, ayar: Object.assign({}, VARSAYILAN_AYAR, v.ayar || {}), sonYedek: v.sonYedek || null };
+    const liste = eskiListe(v);
+    if (!Array.isArray(v.ilaclar) || !liste) throw new Error("biçim");
+    if (!confirm(`Yedekte ${v.ilaclar.length} ilaç ve ${liste.length} talimat var.\nŞu anki bilgiler bunlarla DEĞİŞTİRİLSİN mi?`)) return;
+    veri = { ilaclar: v.ilaclar, talimatlar: liste, kategoriler: Array.isArray(v.kategoriler) ? v.kategoriler : varsayilanKategoriler(), ayar: Object.assign({}, VARSAYILAN_AYAR, v.ayar || {}), sonYedek: v.sonYedek || null };
     kaydet(); ayarDoldur(); secili = [];
-    bildir("Yedek yüklendi ✓");
+    bildir("Yedek yüklendi", "tamam");
   } catch (err) {
-    bildir("Bu dosya geçerli bir Macar Reçete yedeği değil.");
+    bildir("Bu dosya geçerli bir Macar Talimat yedeği değil.", "uyari");
   }
 });
 
@@ -413,7 +516,7 @@ $("#kurBtn").addEventListener("click", async () => {
   kurulumOlayi = null;
   $("#kurBtn").classList.add("gizli");
 });
-window.addEventListener("appinstalled", () => { $("#kurBtn").classList.add("gizli"); bildir("Program kuruldu ✓"); });
+window.addEventListener("appinstalled", () => { $("#kurBtn").classList.add("gizli"); bildir("Program kuruldu", "tamam"); });
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").then((kayit) => {
